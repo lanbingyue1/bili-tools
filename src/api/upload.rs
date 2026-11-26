@@ -854,13 +854,14 @@ fn archive_aid(arc: &Value) -> Result<i64> {
         .ok_or_else(|| BiliLiveError::Parse("原稿件详情缺少有效 aid".to_string()))
 }
 
-/// 基于原稿件元数据构造编辑载荷；`title_override` 为 `Some` 时同时修改稿件标题
+/// 基于原稿件元数据构造编辑载荷；`title_override` / `desc_override` 为 `Some` 时同时修改标题/简介
 fn build_edit_payload(
     cookies: &Cookies,
     arc: &Value,
     aid: i64,
     videos: Vec<Value>,
     title_override: Option<&str>,
+    desc_override: Option<&str>,
 ) -> Value {
     json!({
         "aid": aid,
@@ -873,7 +874,7 @@ fn build_edit_payload(
         "tid": arc["tid"].as_u64().unwrap_or(171),
         "tag": arc["tag"].as_str().unwrap_or(""),
         "desc_format_id": arc["desc_format_id"].as_i64().unwrap_or(9999),
-        "desc": arc["desc"].as_str().unwrap_or(""),
+        "desc": desc_override.unwrap_or_else(|| arc["desc"].as_str().unwrap_or("")),
         "recreate": arc["recreate"].as_i64().unwrap_or(-1),
         "dynamic": arc["dynamic"].as_str().unwrap_or(""),
         "interactive": arc["interactive"].as_i64().unwrap_or(0),
@@ -922,6 +923,7 @@ pub fn append_archive_parts(
     cookies: &Cookies,
     video_input: &str,
     new_parts: &[UploadedVideoPart],
+    desc_override: Option<&str>,
 ) -> Result<(Value, usize)> {
     if new_parts.is_empty() {
         return Err(BiliLiveError::Input(
@@ -944,7 +946,7 @@ pub fn append_archive_parts(
     }
     let total_parts = merged_videos.len();
 
-    let payload = build_edit_payload(cookies, arc, aid, merged_videos, None);
+    let payload = build_edit_payload(cookies, arc, aid, merged_videos, None, desc_override);
     let data = submit_archive_edit(cookies, &payload, "追加稿件分P失败")?;
     Ok((data, total_parts))
 }
@@ -1020,7 +1022,7 @@ pub fn replace_archive_part(
         Some(t) => validate_archive_title(t)?,
         None => arc["title"].as_str().unwrap_or("").to_string(),
     };
-    let payload = build_edit_payload(cookies, arc, aid, videos, Some(&title));
+    let payload = build_edit_payload(cookies, arc, aid, videos, Some(&title), None);
     let data = submit_archive_edit(cookies, &payload, "替换稿件视频失败")?;
     Ok(ReplaceOutcome {
         data,

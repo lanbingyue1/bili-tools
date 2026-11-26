@@ -324,6 +324,7 @@ pub struct MockState {
     pub coined_videos: HashMap<i64, u32>,
     pub comments: Vec<MockComment>,
     pub next_rpid: i64,
+    pub last_archive_edit: Option<Value>,
     pub danmaku_xml_override: Option<String>,
     pub followed_mids: HashSet<i64>,
     pub short_links: HashMap<String, String>,
@@ -487,6 +488,7 @@ impl MockState {
             coined_videos: HashMap::new(),
             comments,
             next_rpid: 104192624481,
+            last_archive_edit: None,
             danmaku_xml_override: None,
             followed_mids: HashSet::new(),
             short_links,
@@ -2978,6 +2980,7 @@ fn dispatch(
             if !st.auth_logged_in {
                 return unauth_response();
             }
+            st.last_archive_edit = serde_json::from_slice(&req.body).ok();
             HttpResponse::json(json!({
                 "code": 0,
                 "message": "0",

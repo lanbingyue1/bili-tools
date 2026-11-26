@@ -2083,3 +2083,60 @@ fn t5_biliup_upload_append_studio_live_record_danmaku_and_sub_replies() {
             .contains("<chatserver>chat.bilibili.com</chatserver>")
     );
 }
+
+#[test]
+fn t5_c3_07_append_desc_file_updates_edit_payload_and_rejects_oversized_desc() {
+    let server = MockBiliServer::start();
+    let env = TestEnv::new().with_server(&server).with_valid_cookies();
+    let video = env.write_work_file("p3.mp4", MOCK_MP4_BYTES);
+    let desc_path = env.write_work_file(
+        "new_desc.txt",
+        "新简介第一行\n课程笔记：https://example.com/cure-script-zh".as_bytes(),
+    );
+
+    let out = env
+        .run_bt(&[
+            "--json",
+            "video",
+            "append",
+            "BV1uJ411r7hL",
+            video.to_str().unwrap(),
+            "--desc-file",
+            desc_path.to_str().unwrap(),
+        ])
+        .assert_json_ok();
+    assert_eq!(out["appended_count"], 1);
+    assert_eq!(out["total_parts"], 3);
+    assert_eq!(out["desc_updated"], true);
+
+    let edit = server
+        .state()
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .last_archive_edit
+        .clone()
+        .expect("edit payload should be recorded");
+    assert_eq!(
+        edit["desc"],
+        "新简介第一行\n课程笔记：https://example.com/cure-script-zh"
+    );
+    assert_eq!(edit["title"], "已有录播稿件");
+    assert_eq!(edit["videos"].as_array().unwrap().len(), 3);
+    assert_eq!(edit["videos"][2]["title"], "p3");
+
+    // 超过 2000 字的简介在上传任何文件之前就被拒绝
+    let long_desc = "长".repeat(2001);
+    let long_path = env.write_work_file("long_desc.txt", long_desc.as_bytes());
+    let before = server.requests().len();
+    env.run_bt(&[
+        "--json",
+        "video",
+        "append",
+        "BV1uJ411r7hL",
+        video.to_str().unwrap(),
+        "--desc-file",
+        long_path.to_str().unwrap(),
+    ])
+    .assert_json_err(Some("Input"));
+    assert_eq!(server.requests().len(), before);
+}

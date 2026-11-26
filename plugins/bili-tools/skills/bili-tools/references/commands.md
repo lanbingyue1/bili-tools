@@ -42,6 +42,10 @@
 - `--tid <TID>`: Bilibili partition ID (e.g., `171` 电子竞技, `17` 单机游戏, `122` 野生技术协会).
 - `--copyright <1|2>`: `1` original (default), `2` repost (requires `--source`).
 
+## Append Options (`video append`)
+
+- `--desc <TEXT>` / `--desc-file <PATH>`: update the archive description in the same edit that adds the new parts (UTF-8, max 2000 chars). Validated before any upload starts.
+
 ## JSON Error Envelope Kinds
 
 `Input`, `Auth`, `Api`, `Network`, `Parse`, `Io`, `ExternalTool`, `Cancelled`.
