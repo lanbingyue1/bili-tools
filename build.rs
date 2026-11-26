@@ -1,0 +1,10 @@
+fn main() {
+    // Windows 的 PE 默认只给主线程保留 1MB 栈。调试构建下 clap 构建本工具的超大命令树
+    // （video 下 60+ 子命令）会逼近该上限，新增少量子命令后就可能在 `bit --help` 阶段
+    // 直接栈溢出。这里只对 Windows 调试构建放宽到 8MB，release 产物与其他平台不受影响。
+    let target_windows = std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("windows");
+    let debug_build = std::env::var("PROFILE").as_deref() == Ok("debug");
+    if target_windows && debug_build {
+        println!("cargo:rustc-link-arg-bins=/STACK:8388608");
+    }
+}
