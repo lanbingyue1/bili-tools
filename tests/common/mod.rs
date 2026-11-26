@@ -337,6 +337,7 @@ pub struct MockState {
     pub next_rpid: i64,
     pub subtitles: Vec<MockSubtitle>,
     pub next_subtitle_id: i64,
+    pub last_archive_edit: Option<Value>,
     pub danmaku_xml_override: Option<String>,
     pub followed_mids: HashSet<i64>,
     pub short_links: HashMap<String, String>,
@@ -502,6 +503,7 @@ impl MockState {
             next_rpid: 104192624481,
             subtitles: Vec::new(),
             next_subtitle_id: 2160000000000000001,
+            last_archive_edit: None,
             danmaku_xml_override: None,
             followed_mids: HashSet::new(),
             short_links,
@@ -3164,6 +3166,7 @@ fn dispatch(
             if !st.auth_logged_in {
                 return unauth_response();
             }
+            st.last_archive_edit = serde_json::from_slice(&req.body).ok();
             HttpResponse::json(json!({
                 "code": 0,
                 "message": "0",

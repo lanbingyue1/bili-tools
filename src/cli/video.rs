@@ -2483,7 +2483,44 @@ pub fn handle_video(cmd: VideoCommands) -> Result<()> {
             files,
             line,
             limit,
+            desc,
+            desc_file,
         } => {
+            // 简介在开始上传前读取并校验，避免上传完数 GB 后才因简介过长失败
+            let new_desc = match (desc, desc_file) {
+                (Some(text), None) => Some(text),
+                (None, Some(path)) => {
+                    let raw = std::fs::read_to_string(&path).map_err(|e| {
+                        BiliLiveError::Input(format!(
+                            "无法读取简介文件 '{}': {e}",
+                            path.display()
+                        ))
+                    })?;
+                    Some(
+                        raw.strip_prefix('\u{feff}')
+                            .unwrap_or(&raw)
+                            .to_string(),
+                    )
+                }
+                (None, None) => None,
+                (Some(_), Some(_)) => {
+                    return Err(BiliLiveError::Input(
+                        "--desc 与 --desc-file 只能二选一".to_string(),
+                    ));
+                }
+            };
+            if let Some(text) = &new_desc {
+                let trimmed = text.trim();
+                if trimmed.is_empty() {
+                    return Err(BiliLiveError::Input("稿件简介不能为空".to_string()));
+                }
+                if trimmed.chars().count() > 2000 {
+                    return Err(BiliLiveError::Input(
+                        "稿件简介不能超过 2000 个字符".to_string(),
+                    ));
+                }
+            }
+
             for f in &files {
                 let m = std::fs::metadata(f).map_err(|e| {
                     BiliLiveError::Input(format!("无法读取待追加视频文件 '{}': {e}", f.display()))
@@ -2524,8 +2561,12 @@ pub fn handle_video(cmd: VideoCommands) -> Result<()> {
                 new_parts.push(part);
             }
 
-            let (res, total_parts) =
-                crate::api::upload::append_archive_parts(&cookies, &video, &new_parts)?;
+            let (res, total_parts) = crate::api::upload::append_archive_parts(
+                &cookies,
+                &video,
+                &new_parts,
+                new_desc.as_deref(),
+            )?;
             let bvid = res["bvid"]
                 .as_str()
                 .or_else(|| existing["archive"]["bvid"].as_str())
@@ -2544,6 +2585,7 @@ pub fn handle_video(cmd: VideoCommands) -> Result<()> {
                     "title": existing_title,
                     "appended_count": new_parts.len(),
                     "total_parts": total_parts,
+                    "desc_updated": new_desc.is_some(),
                     "appended_parts": new_parts,
                     "data": res,
                 }))?;

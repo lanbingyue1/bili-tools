@@ -1006,6 +1006,14 @@ pub enum VideoCommands {
         /// 单文件最大并发上传线程数 (1-16)
         #[arg(long, default_value_t = 3, value_parser = clap::value_parser!(u32).range(1..=16))]
         limit: u32,
+
+        /// 追加分P的同时更新稿件简介（最长 2000 字；与 --desc-file 二选一）
+        #[arg(long, value_name = "TEXT", conflicts_with = "desc_file")]
+        desc: Option<String>,
+
+        /// 从 UTF-8 文本文件读取新简介（与 --desc 二选一）
+        #[arg(long, value_name = "PATH", conflicts_with = "desc")]
+        desc_file: Option<PathBuf>,
     },
 
     /// 替换已有稿件中指定分P的视频文件（保留 BV 号与播放数据，可同时修改标题；提交后重新审核）
