@@ -126,7 +126,7 @@ bit video coin BV1hp4y1k7SV -n 2            # 投币 (1-2)
 bit video triple BV1hp4y1k7SV               # 一键三连
 bit video download BV1hp4y1k7SV -p 1 -Q 80 -e hevc --danmaku --subtitle --cover
 bit video upload a.mp4 --title "演示" --tid 171 --tag "工具,CLI" # UPOS 投稿（支持多 P / --line）
-bit video append <BVID> b.mp4               # 向已有稿件追加分 P（--desc-file 可同步更新简介）
+bit video append <BVID> b.mp4 --delay 20    # 向已有稿件追加分 P（--desc-file 可同步更新简介，--delay 规避上传限流）
 bit video replace <BVID> new.mp4 -t "新标题" # 替换稿件视频文件（保留 BV 号，可同时改标题，需重新审核）
 bit video studio ls                         # 查看创作中心个人稿件列表
 

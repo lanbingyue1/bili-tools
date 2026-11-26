@@ -325,6 +325,8 @@ pub struct MockState {
     pub comments: Vec<MockComment>,
     pub next_rpid: i64,
     pub last_archive_edit: Option<Value>,
+    /// 模拟平台预上传限流（code 601）的次数，递减到 0 后恢复正常
+    pub preupload_601_remaining: i64,
     pub danmaku_xml_override: Option<String>,
     pub followed_mids: HashSet<i64>,
     pub short_links: HashMap<String, String>,
@@ -489,6 +491,7 @@ impl MockState {
             comments,
             next_rpid: 104192624481,
             last_archive_edit: None,
+            preupload_601_remaining: 0,
             danmaku_xml_override: None,
             followed_mids: HashSet::new(),
             short_links,
@@ -2884,6 +2887,19 @@ fn dispatch(
             }
             if !st.auth_logged_in {
                 return unauth_response();
+            }
+            if st.preupload_601_remaining > 0 {
+                st.preupload_601_remaining -= 1;
+                return HttpResponse::text(
+                    406,
+                    "application/json; charset=utf-8",
+                    serde_json::to_vec(&json!({
+                        "OK": 0,
+                        "code": 601,
+                        "message": "您上传视频过快，请您稍作休息后再继续"
+                    }))
+                    .unwrap_or_default(),
+                );
             }
             let raw_name = req.query_param("name").unwrap_or("part.mp4");
             let stem = raw_name.split('.').next().unwrap_or("part");

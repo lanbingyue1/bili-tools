@@ -940,6 +940,10 @@ pub enum VideoCommands {
         #[arg(long, default_value_t = 3, value_parser = clap::value_parser!(u32).range(1..=16))]
         limit: u32,
 
+        /// 每个分P上传完成后的等待秒数（规避平台“上传过快”限流；0 表示不等待）
+        #[arg(long, default_value_t = 0, value_name = "SECS")]
+        delay: u64,
+
         /// 追加分P的同时更新稿件简介（最长 2000 字；与 --desc-file 二选一）
         #[arg(long, value_name = "TEXT", conflicts_with = "desc_file")]
         desc: Option<String>,
