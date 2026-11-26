@@ -2483,6 +2483,7 @@ pub fn handle_video(cmd: VideoCommands) -> Result<()> {
             files,
             line,
             limit,
+            delay,
             desc,
             desc_file,
         } => {
@@ -2544,6 +2545,10 @@ pub fn handle_video(cmd: VideoCommands) -> Result<()> {
             let line_query = crate::api::upload::resolve_line_query(line);
             let mut new_parts = Vec::with_capacity(files.len());
             for (idx, f) in files.iter().enumerate() {
+                if idx > 0 && delay > 0 {
+                    user_info!("等待 {} 秒后继续上传（规避平台上传限流）...", delay);
+                    std::thread::sleep(std::time::Duration::from_secs(delay));
+                }
                 user_info!(
                     "上传待追加分P [{}/{}] -> 《{}》: {}...",
                     idx + 1,

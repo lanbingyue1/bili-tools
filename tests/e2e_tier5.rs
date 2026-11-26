@@ -2433,3 +2433,67 @@ fn t5_c3_07_append_desc_file_updates_edit_payload_and_rejects_oversized_desc() {
     .assert_json_err(Some("Input"));
     assert_eq!(server.requests().len(), before);
 }
+
+#[test]
+fn t5_c3_08_upload_preupload_rate_limit_retries_with_backoff() {
+    let server = MockBiliServer::start();
+    let env = TestEnv::new().with_server(&server).with_valid_cookies();
+    let video = env.write_work_file("p4.mp4", MOCK_MP4_BYTES);
+
+    // 前两次预上传返回 406 / code 601，第三次成功；退避基准设为 0 以免用例等待
+    server
+        .state()
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .preupload_601_remaining = 2;
+    let out = env
+        .run_bt_env(
+            &[
+                "--json",
+                "video",
+                "append",
+                "BV1uJ411r7hL",
+                video.to_str().unwrap(),
+            ],
+            &[("BT_UPLOAD_RETRY_BASE_SECS", "0")],
+        )
+        .assert_json_ok();
+    assert_eq!(out["appended_count"], 1);
+
+    let upload_attempts = server
+        .requests()
+        .iter()
+        .filter(|r| {
+            r.method == "GET"
+                && r.path == "/preupload"
+                && r.query_param("r") != Some("probe")
+                && r.query_param("name") == Some("p4.mp4")
+        })
+        .count();
+    assert_eq!(upload_attempts, 3, "expected 2 rate-limited + 1 success");
+
+    // 持续限流时最终以 Api 错误返回，而不是无限重试
+    server
+        .state()
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .preupload_601_remaining = 99;
+    let err = env
+        .run_bt_env(
+            &[
+                "--json",
+                "video",
+                "append",
+                "BV1uJ411r7hL",
+                video.to_str().unwrap(),
+            ],
+            &[("BT_UPLOAD_RETRY_BASE_SECS", "0")],
+        )
+        .assert_json_err(Some("Api"));
+    assert!(
+        err["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("限流")
+    );
+}

@@ -15,6 +15,60 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 const UPOS_PROFILE: &str = "ugcfx/bup";
 const DEFAULT_CHUNK_SIZE: u64 = 10 * 1024 * 1024; // 10 MiB
 const MAX_COVER_BYTES: u64 = 20 * 1024 * 1024; // 20 MiB
+const PREUPLOAD_MAX_RETRIES: u32 = 6;
+
+/// 限流退避的基准秒数；仅测试通过 `BT_UPLOAD_RETRY_BASE_SECS` 覆盖为 0，避免用例白等。
+fn preupload_retry_base_secs() -> u64 {
+    std::env::var("BT_UPLOAD_RETRY_BASE_SECS")
+        .ok()
+        .and_then(|value| value.trim().parse::<u64>().ok())
+        .unwrap_or(60)
+}
+
+/// 预上传在短时间大量调用时会触发平台限流（HTTP 406 / code 601「您上传视频过快」）。
+/// 这里按线性退避重试，避免整批上传在第 N 个文件直接失败。
+fn request_preupload_with_retry(url: &str, cookies: &Cookies) -> Result<minreq::Response> {
+    let mut attempt = 0u32;
+    loop {
+        let resp = crate::api::client::get(url)
+            .with_header("User-Agent", DEFAULT_USER_AGENT)
+            .with_header("Referer", "https://member.bilibili.com/")
+            .with_header("Cookie", cookies.cookie_header())
+            .send()?;
+
+        if matches!(resp.status_code, 406 | 429 | 503) {
+            let json: Option<Value> = resp.as_str().ok().and_then(|text| serde_json::from_str(text).ok());
+            let code = json.as_ref().and_then(|v| v["code"].as_i64());
+            let rate_limited = resp.status_code != 406 || code == Some(601);
+            if rate_limited {
+                if attempt >= PREUPLOAD_MAX_RETRIES {
+                    return Err(BiliLiveError::Api(format!(
+                        "UPOS 预上传持续触发平台限流（HTTP {}，code {}）：{}；请稍后重试或减少单次上传数量",
+                        resp.status_code,
+                        code.unwrap_or(-1),
+                        json.as_ref()
+                            .and_then(|v| v["message"].as_str())
+                            .unwrap_or("上传过快")
+                    )));
+                }
+                attempt += 1;
+                let wait = preupload_retry_base_secs().saturating_mul(attempt as u64);
+                crate::user_warning!(
+                    "上传触发平台限流（code {}），{} 秒后重试（{}/{}）",
+                    code.unwrap_or(-1),
+                    wait,
+                    attempt,
+                    PREUPLOAD_MAX_RETRIES
+                );
+                if wait > 0 {
+                    std::thread::sleep(Duration::from_secs(wait));
+                }
+                continue;
+            }
+        }
+        return Ok(resp);
+    }
+}
 
 /// B 站 UPOS 投稿上传线路（对标 biliup-rs）
 #[derive(ValueEnum, Clone, Copy, Debug, PartialEq, Eq, Default)]
@@ -347,11 +401,7 @@ pub fn upload_single_video_file(
         "{}/preupload?{full_pre_q}",
         crate::api::client::member_api_base_url()
     );
-    let pre_resp = crate::api::client::get(&pre_url)
-        .with_header("User-Agent", DEFAULT_USER_AGENT)
-        .with_header("Referer", "https://member.bilibili.com/")
-        .with_header("Cookie", cookies.cookie_header())
-        .send()?;
+    let pre_resp = request_preupload_with_retry(&pre_url, cookies)?;
     let pre_json: Value = crate::api::client::parse_json_response(&pre_resp, "预上传请求失败")?;
     if pre_json["OK"].as_i64() != Some(1) {
         return Err(BiliLiveError::Api(format!("UPOS 预上传失败: {}", pre_json)));

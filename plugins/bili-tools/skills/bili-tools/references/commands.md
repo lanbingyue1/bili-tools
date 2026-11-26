@@ -45,6 +45,7 @@
 ## Append Options (`video append`)
 
 - `--desc <TEXT>` / `--desc-file <PATH>`: update the archive description in the same edit that adds the new parts (UTF-8, max 2000 chars). Validated before any upload starts.
+- `--delay <SECS>`: wait this many seconds after each part finishes uploading before starting the next (default `0`). Use for large batches to avoid the platform's "uploading too fast" limit (`code 601`). Preupload also retries automatically on `code 601` with linear backoff (max 6 attempts, base `BT_UPLOAD_RETRY_BASE_SECS`, default 60s).
 
 ## Subtitle Track Options (`video subtitle-upload` / `subtitle-list` / `subtitle-delete`)
 
